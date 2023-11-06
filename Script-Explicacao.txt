@@ -1,0 +1,41 @@
+
+--ATENCAO NAO RODAR ESSE SCRIPT ELE É SÓ PARA FINS DE EXPLICACAO
+
+-- O script busca informações do ambiente e do banco de dados SQL Server.
+
+-- Select @@Version é uma função do SQL Server que retorna a versão do banco de dados.
+-- É uma função embutida que retorna informações sobre a versão do sistema de banco de dados.
+SELECT @@Version AS DatabaseType;
+
+-- Esta subconsulta coleta informações sobre os volumes de armazenamento.
+-- Utiliza a tabela sys.master_files e a função dm_os_volume_stats para obter informações sobre espaço em disco.
+-- Isso inclui montagem, volume, total em GB, espaço disponível em GB, percentual de espaço disponível e percentual de espaço em uso.
+SELECT
+    VS.volume_mount_point AS [Montagem],
+    VS.logical_volume_name AS [Volume],
+    CAST(CAST(VS.total_bytes AS DECIMAL(19, 2)) / 1024 / 1024 / 1024 AS DECIMAL(10, 2)) AS [Total (GB)],
+    CAST(CAST(VS.available_bytes AS DECIMAL(19, 2)) / 1024 / 1024 / 1024 AS DECIMAL(10, 2)) AS [Espaço Disponível (GB)],
+    CAST((CAST(VS.available_bytes AS DECIMAL(19, 2)) / CAST(VS.total_bytes AS DECIMAL(19, 2)) * 100) AS DECIMAL(10, 2)) AS [Espaço Disponível (%)],
+    CAST((100 - CAST(VS.available_bytes AS DECIMAL(19, 2)) / CAST(VS.total_bytes AS DECIMAL(19, 2)) * 100) AS DECIMAL(10, 2)) AS [Espaço em uso (%)]
+FROM
+    sys.master_files AS MF
+    CROSS APPLY [sys].[dm_os_volume_stats](MF.database_id, MF.file_id) AS VS
+WHERE
+    CAST(VS.available_bytes AS DECIMAL(19, 2)) / CAST(VS.total_bytes AS DECIMAL(19, 2)) * 100 < 100;
+
+-- Essa parte da consulta coleta informações de memória e desempenho do sistema.
+-- Utiliza as tabelas sys.dm_os_sys_info, sys.dm_os_sys_memory e sys.dm_os_performance_counters para obter dados como uso de memória e PLE (Page Life Expectancy).
+SELECT 
+    GETDATE() as collectionTime,
+    (si.committed_kb/1024) as Committed,
+    (si.committed_target_kb/1024) as targetCommited,
+    (sm.total_physical_memory_kb/1024) as totalMem,
+    (sm.available_physical_memory_kb/1024) as AvaiMem,
+    (SELECT SUM(cntr_value)/COUNT(*) FROM sys.dm_os_performance_counters 
+        WHERE counter_name = 'Page Life expectancy' AND object_name LIKE '%buffer node%') as PLE
+FROM sys.dm_os_sys_info si, sys.dm_os_sys_memory sm;
+
+-- Coleta o nome do host e a quantidade de CPUs disponíveis no servidor.
+SELECT 
+    HOST_NAME() AS HostName,
+    (SELECT cpu_count FROM sys.dm_os_sys_info) AS NumberOfCPUs;
