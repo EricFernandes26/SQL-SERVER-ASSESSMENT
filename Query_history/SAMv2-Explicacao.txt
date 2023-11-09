@@ -1,0 +1,61 @@
+--ATENCAO NAO RODAR ESSE SCRIPT ELE É SÓ PARA FINS DE EXPLICACAO DO SQL ASSESSEMENT V2
+
+
+-- Definição da variável para capturar o valor atual do timestamp do sistema
+DECLARE @ts_now bigint = (SELECT cpu_ticks/(cpu_ticks/ms_ticks) FROM sys.dm_os_sys_info); 
+
+-- Seleciona os dados finais organizados de acordo com os requisitos
+SELECT 
+    HostName, -- Nome do host do servidor SQL
+    NumberOfCPUs AS NumberOfCPU, -- Número de CPUs no servidor
+    SQLProcessUtilization, -- Utilização do Processo do SQL Server
+    [System Idle Process] AS [System Idle Process], -- Processo de ociosidade do sistema
+    [Other Process CPU Utilization], -- Utilização de CPU de outros processos
+    TotalMemKB, -- Memória física total disponível no servidor (em KB)
+    AvaiMemKB, -- Memória física disponível atualmente (em KB)
+    PLE, -- Expectativa de Vida da Página (Page Life Expectancy)
+    DatabaseType AS [Database Type], -- Tipo do banco de dados (ex.: SQL Server version)
+    [Event Time] -- Momento do evento registrado
+FROM (
+    -- Seleciona e organiza os dados provenientes de diferentes fontes
+
+    -- Seção para informações básicas do servidor e de recursos de hardware
+    SELECT 
+        HOST_NAME() AS HostName, -- Nome do host do servidor SQL
+        (SELECT cpu_count FROM sys.dm_os_sys_info) AS NumberOfCPUs, -- Número de CPUs no servidor
+        SQLProcessUtilization, -- Utilização do Processo do SQL Server
+        SystemIdle AS [System Idle Process], -- Processo de ociosidade do sistema
+        100 - SystemIdle - SQLProcessUtilization AS [Other Process CPU Utilization], -- Utilização de CPU de outros processos
+        x.totalMem AS TotalMemKB, -- Memória física total disponível no servidor (em KB)
+        x.AvaiMem AS AvaiMemKB, -- Memória física disponível atualmente (em KB)
+        x.PLE, -- Expectativa de Vida da Página (Page Life Expectancy)
+        @@Version AS DatabaseType, -- Versão do banco de dados (ex.: SQL Server version)
+        DATEADD(ms, -1 * ((SELECT cpu_ticks/(cpu_ticks/ms_ticks) FROM sys.dm_os_sys_info) - [timestamp]), GETDATE()) AS [Event Time]
+    FROM (
+        -- Consulta para obter dados como memória física, Page Life Expectancy, etc.
+        SELECT
+            GETDATE() as collectionTime,
+            (si.committed_kb/1024) as Committed,
+            (si.committed_target_kb/1024) as targetCommited,
+            (sm.total_physical_memory_kb/1024) as totalMem,
+            (sm.available_physical_memory_kb/1024) as AvaiMem,
+            (SELECT SUM(cntr_value)/COUNT(*) FROM sys.dm_os_performance_counters 
+                WHERE counter_name = 'Page Life expectancy' AND object_name LIKE '%buffer node%') as PLE
+        FROM sys.dm_os_sys_info si, sys.dm_os_sys_memory sm
+    ) AS x
+    CROSS APPLY (
+        -- Consulta para obter detalhes de utilização da CPU
+        SELECT TOP(30) 
+            record.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS SQLProcessUtilization, 
+            record.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS SystemIdle,
+            [timestamp]
+        FROM (
+            -- Consulta para buscar registros do buffer de anéis para monitorar o desempenho da CPU
+            SELECT [timestamp], CONVERT(xml, record) AS [record]
+            FROM sys.dm_os_ring_buffers 
+            WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR' 
+            AND record LIKE '%<SystemHealth>%'
+        ) AS x
+    ) AS y
+) AS CombinedData
+ORDER BY [Event Time] DESC; -- Ordena os resultados pela coluna [Event Time] em ordem decrescente
