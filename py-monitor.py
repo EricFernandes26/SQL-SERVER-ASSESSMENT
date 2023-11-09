@@ -8,7 +8,7 @@ def get_connection_info():
     print("Please enter your database connection information:")
     user = input("Username: ")
     password = getpass.getpass("Password: ")  # Isso ocultará a senha inserida
-    dbserver = input("Server ")
+    dbserver = input("Server: ")
     dbname = input("Database name: ")
     return user, password, dbserver, dbname
 
