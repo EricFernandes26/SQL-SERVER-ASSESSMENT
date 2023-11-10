@@ -3,13 +3,13 @@ queries = {
       DECLARE @totaliops DECIMAL;
 DECLARE @Throughput DECIMAL;
 
-
+-- Cálculo das métricas de IOPS e Throughput
 SELECT 
     @totaliops = ISNULL(SUM(io_stall / NULLIF((num_of_reads + num_of_writes), 0)), 0),
     @Throughput = ISNULL(SUM((num_of_bytes_read + num_of_bytes_written) / 1048576), 0)
 FROM sys.dm_io_virtual_file_stats(NULL, NULL);
 
-
+-- Obter métricas de sistema junto com IOPS e Throughput
 SELECT 
     HostName,
     NumberOfCPUs AS NumberOfCPU,
@@ -21,7 +21,6 @@ SELECT
     PLE,
 	@totaliops AS TotalIOPS,
     @Throughput AS Throughput,
-    DatabaseType AS [Database Type],
     [Event Time]
   
 FROM (
@@ -34,7 +33,6 @@ FROM (
         x.totalMem AS TotalMemKB,
         x.AvaiMem AS AvaiMemKB,
         x.PLE,
-        @@Version AS DatabaseType,
         DATEADD(ms, -1 * ((SELECT cpu_ticks / (cpu_ticks / ms_ticks) FROM sys.dm_os_sys_info) - [timestamp]), GETDATE()) AS [Event Time]
     FROM (
         SELECT
@@ -89,11 +87,11 @@ FROM
         CAST(VS.available_bytes AS DECIMAL(19, 2)) / CAST(VS.total_bytes AS DECIMAL(19, 2)) * 100 < 100
     ) AS y;
 
-    """ 
+    """,
 
-    #"SQLServerAssessement-Disk: """
-       # query (colar consulta)
-
-     #""" 
+"sqlserver_assessment_DatabaseType": """
+    select @@Version AS DatabaseType
+    
+    """
 
 }
