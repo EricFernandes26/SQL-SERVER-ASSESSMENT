@@ -17,9 +17,8 @@ SELECT
     TotalMemKB,
     AvaiMemKB,
     PLE,
-	@totaliops AS TotalIOPS,
+    @totaliops AS TotalIOPS,
     @Throughput AS Throughput,
-    DatabaseType AS [Database Type],
     [Event Time]
   
 FROM (
@@ -32,7 +31,6 @@ FROM (
         x.totalMem AS TotalMemKB,
         x.AvaiMem AS AvaiMemKB,
         x.PLE,
-        @@Version AS DatabaseType,
         DATEADD(ms, -1 * ((SELECT cpu_ticks / (cpu_ticks / ms_ticks) FROM sys.dm_os_sys_info) - [timestamp]), GETDATE()) AS [Event Time]
     FROM (
         SELECT
