@@ -1,9 +1,7 @@
 queries = {
     "sqlserver_assessment": """
-    
---SAM-SQL04
+      --SAM-SQL05
 SET NOCOUNT ON;
-
 DECLARE @totaliops DECIMAL;
 DECLARE @Throughput DECIMAL;
 DECLARE @TotalMemKB DECIMAL;
@@ -66,6 +64,47 @@ CROSS APPLY (
     ) AS x
 ) AS y;
 
+-- Calcular a média da coluna SQLProcessUtilization
+DECLARE @Media_SQLProcessUtilization DECIMAL;
+SELECT @Media_SQLProcessUtilization = AVG(SQLProcessUtilization) FROM #TempResults;
+
+-- Calcular a média da coluna AvaiMemKB
+DECLARE @Media_AvaiMemKB DECIMAL; -- Alterado para DECIMAL para garantir a comparação correta
+SELECT @Media_AvaiMemKB = AVG(AvaiMemKB) FROM #TempResults;
+
+-- Calcular o percentil 95 da coluna SQLProcessUtilization
+--DECLARE @Percentil95_SQLProcessUtilization DECIMAL;
+--SELECT @Percentil95_SQLProcessUtilization = PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY SQLProcessUtilization) OVER () FROM #TempResults;
+
+-- Calcular o percentil 95 da coluna AvaiMemKB
+--DECLARE @Percentil95_AvaiMemKB DECIMAL;
+--SELECT @Percentil95_AvaiMemKB = PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY AvaiMemKB) OVER () FROM #TempResults;
+
+
+-- Adicionar a lógica para definir @InstanceType
+DECLARE @InstanceType NVARCHAR(50);
+DECLARE @InstanceFamily NVARCHAR(50); 
+DECLARE @Percentil95_SQLProcessUtilization FLOAT = 0; 
+DECLARE @Percentil95_AvaiMemKB FLOAT = 10;
+
+
+SET @InstanceType = 
+    CASE
+        WHEN @Percentil95_SQLProcessUtilization BETWEEN 0 AND 10 AND @Percentil95_AvaiMemKB BETWEEN 0 AND 10 THEN 't3.nano'
+        WHEN @Percentil95_SQLProcessUtilization BETWEEN 11 AND 19 AND @Percentil95_AvaiMemKB BETWEEN 11 AND 19 THEN 't3.medium'
+        WHEN @Percentil95_SQLProcessUtilization BETWEEN 20 AND 29 AND @Percentil95_AvaiMemKB BETWEEN 20 AND 29 THEN 't3.large'
+        WHEN @Percentil95_SQLProcessUtilization BETWEEN 30 AND 39 AND @Percentil95_AvaiMemKB BETWEEN 30 AND 39 THEN 'm5.large'
+        WHEN @Percentil95_SQLProcessUtilization BETWEEN 40 AND 49 AND @Percentil95_AvaiMemKB BETWEEN 40 AND 49 THEN 'm5.xlarge'
+        WHEN @Percentil95_SQLProcessUtilization BETWEEN 50 AND 59 AND @Percentil95_AvaiMemKB BETWEEN 50 AND 59 THEN 'm5.2xlarge'
+		WHEN @Percentil95_SQLProcessUtilization BETWEEN 60 AND 69 AND @Percentil95_AvaiMemKB BETWEEN 60 AND 69 THEN 'm5.2xlarge'
+		WHEN @Percentil95_SQLProcessUtilization BETWEEN 70 AND 79 AND @Percentil95_AvaiMemKB BETWEEN 70 AND 79 THEN 'r6i.8xlarge'
+		WHEN @Percentil95_SQLProcessUtilization BETWEEN 80 AND 89 AND @Percentil95_AvaiMemKB BETWEEN 80 AND 89 THEN 'r6i.12xlarge'
+		WHEN @Percentil95_SQLProcessUtilization BETWEEN 90 AND 99 AND @Percentil95_AvaiMemKB BETWEEN 90 AND 99 THEN 'r6i.16xlarge'
+        WHEN @Percentil95_SQLProcessUtilization >= 100 OR @Percentil95_AvaiMemKB >= 100 THEN 'x2iedn.32xlarge'
+        ELSE 't3.small' -- Defina o tipo de instância padrão
+    END;
+
+
 -- Selecionar resultados finais da tabela temporária
 SELECT 
     HostName,
@@ -74,14 +113,16 @@ SELECT
     TotalMemKB,
     AvaiMemKB,
     PLE,
+	@totaliops AS TotalIOPS,
+    @Throughput AS Throughput,
     Percentil95_SQLProcessUtilization,
+	@Media_SQLProcessUtilization AS Media_SQLProcessUtilization,  -- Adicionar a coluna desejada aqui
     MAX(Percentil95_AvaiMemKB) OVER (PARTITION BY HostName) AS Percentil95_AvaiMemKB,
     AVG(AvaiMemKB) OVER (PARTITION BY HostName) AS Media_AvaiMemKB,
-    @totaliops AS TotalIOPS,
-    @Throughput AS Throughput,
+	@InstanceType AS InstanceType, -- Adicionar a coluna desejada aqui
     [Event Time]
 FROM #TempResults
-WHERE [Event Time] >= DATEADD(MINUTE, -30, GETDATE())
+WHERE [Event Time] >= DATEADD(SECOND, -160, GETDATE())
 
 
 
