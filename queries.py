@@ -1,15 +1,27 @@
 queries = {
     "sqlserver_assessment": """
-        --SAM-SQL05
+-- Configurações iniciais
 SET NOCOUNT ON;
-DECLARE @totaliops DECIMAL;
-DECLARE @Throughput DECIMAL;
-DECLARE @TotalMemKB DECIMAL;
+
+-- Declaração de variáveis
+DECLARE 
+    @totaliops DECIMAL,
+    @Throughput DECIMAL,
+    @TotalMemKB DECIMAL,
+    @Percentil95_SQLProcessUtilization FLOAT,
+    @Percentil95_AvaiMemKB INT,
+    @Normalized_CPU FLOAT,
+    @Normalized_Mem FLOAT,
+    @CombinedScore FLOAT,
+    @Media_SQLProcessUtilization DECIMAL,
+    @Media_AvaiMemKB DECIMAL,
+    @InstanceType NVARCHAR(50);
 
 -- Parte 1: Obter total de memória física
 SELECT @TotalMemKB = (sm.total_physical_memory_kb / 1024)
 FROM sys.dm_os_sys_info si, sys.dm_os_sys_memory sm;
 
+-- Calcular IOPS e Throughput
 SELECT 
     @totaliops = ISNULL(SUM(io_stall / NULLIF((num_of_reads + num_of_writes), 0)), 0),
     @Throughput = ISNULL(SUM((num_of_bytes_read + num_of_bytes_written) / 1048576), 0)
@@ -65,45 +77,34 @@ CROSS APPLY (
 ) AS y;
 
 -- Calcular a média da coluna SQLProcessUtilization
-DECLARE @Media_SQLProcessUtilization DECIMAL;
 SELECT @Media_SQLProcessUtilization = AVG(SQLProcessUtilization) FROM #TempResults;
 
 -- Calcular a média da coluna AvaiMemKB
-DECLARE @Media_AvaiMemKB DECIMAL; -- Alterado para DECIMAL para garantir a comparação correta
 SELECT @Media_AvaiMemKB = AVG(AvaiMemKB) FROM #TempResults;
 
--- Calcular o percentil 95 da coluna SQLProcessUtilization
---DECLARE @Percentil95_SQLProcessUtilization DECIMAL;
---SELECT @Percentil95_SQLProcessUtilization = PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY SQLProcessUtilization) OVER () FROM #TempResults;
+-- Normalizar as métricas para ficarem entre 0 e 100
+SET @Normalized_CPU = (@Percentil95_SQLProcessUtilization / 100.0) * 50.0; -- Peso 50%
+SET @Normalized_Mem = (@Percentil95_AvaiMemKB / 102400.0) * 50.0; -- Peso 50%
 
--- Calcular o percentil 95 da coluna AvaiMemKB
---DECLARE @Percentil95_AvaiMemKB DECIMAL;
---SELECT @Percentil95_AvaiMemKB = PERCENTILE_CONT(0.95) WITHIN GROUP (ORDER BY AvaiMemKB) OVER () FROM #TempResults;
+-- Calcular a pontuação combinada (pesos ajustáveis conforme necessário)
+SET @CombinedScore = @Normalized_CPU + @Normalized_Mem;
 
-
--- Adicionar a lógica para definir @InstanceType
-DECLARE @InstanceType NVARCHAR(50);
-DECLARE @InstanceFamily NVARCHAR(50); 
-DECLARE @Percentil95_SQLProcessUtilization FLOAT; 
-DECLARE @Percentil95_AvaiMemKB INT;
-
-
+-- Definir @InstanceType com base na pontuação combinada
 SET @InstanceType = 
     CASE
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 0 AND 10 AND @Percentil95_AvaiMemKB BETWEEN 0 AND 10240 THEN 't3.nano'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 11 AND 19 AND @Percentil95_AvaiMemKB BETWEEN 10241 AND 20480 THEN 't3.medium'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 20 AND 29 AND @Percentil95_AvaiMemKB BETWEEN 20481 AND 30720 THEN 't3.large'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 30 AND 39 AND @Percentil95_AvaiMemKB BETWEEN 30721 AND 40960 THEN 'm5.large'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 40 AND 49 AND @Percentil95_AvaiMemKB BETWEEN 40961 AND 51200 THEN 'm5.xlarge'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 50 AND 59 AND @Percentil95_AvaiMemKB BETWEEN 51201 AND 61440 THEN 'm5.2xlarge'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 60 AND 69 AND @Percentil95_AvaiMemKB BETWEEN 61441 AND 71680 THEN 'm5.2xlarge'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 70 AND 79 AND @Percentil95_AvaiMemKB BETWEEN 71681 AND 81920 THEN 'r6i.8xlarge'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 80 AND 89 AND @Percentil95_AvaiMemKB BETWEEN 81921 AND 92160 THEN 'r6i.12xlarge'
-        WHEN @Percentil95_SQLProcessUtilization BETWEEN 90 AND 99 AND @Percentil95_AvaiMemKB BETWEEN 92161 AND 102400 THEN 'r6i.16xlarge'
-        WHEN @Percentil95_SQLProcessUtilization >= 100 OR @Percentil95_AvaiMemKB >= 102401 THEN 'x2iedn.32xlarge'
+        WHEN @CombinedScore BETWEEN 0 AND 10 THEN 't3.nano'
+        WHEN @CombinedScore BETWEEN 11 AND 19 THEN 't3.medium'
+        WHEN @CombinedScore BETWEEN 20 AND 29 THEN 't3.large'
+        WHEN @CombinedScore BETWEEN 30 AND 39 THEN 'm5.large'
+        WHEN @CombinedScore BETWEEN 40 AND 49 THEN 'm5.xlarge'
+        WHEN @CombinedScore BETWEEN 50 AND 59 THEN 'm5.2xlarge'
+        WHEN @CombinedScore BETWEEN 60 AND 69 THEN 'm5.2xlarge'
+        WHEN @CombinedScore BETWEEN 70 AND 79 THEN 'r6i.8xlarge'
+        WHEN @CombinedScore BETWEEN 80 AND 89 THEN 'r6i.12xlarge'
+        WHEN @CombinedScore BETWEEN 90 AND 99 THEN 'r6i.16xlarge'
+        WHEN @CombinedScore >= 100 THEN 'x2iedn.32xlarge'
         ELSE 't3.small' -- Defina o tipo de instância padrão
     END;
-
 
 -- Selecionar resultados finais da tabela temporária
 SELECT 
@@ -113,16 +114,20 @@ SELECT
     TotalMemKB,
     AvaiMemKB,
     PLE,
-	@totaliops AS TotalIOPS,
+    @totaliops AS TotalIOPS,
     @Throughput AS Throughput,
     Percentil95_SQLProcessUtilization,
-	@Media_SQLProcessUtilization AS Media_SQLProcessUtilization,  -- Adicionar a coluna desejada aqui
+    @Media_SQLProcessUtilization AS Media_SQLProcessUtilization,  
     MAX(Percentil95_AvaiMemKB) OVER (PARTITION BY HostName) AS Percentil95_AvaiMemKB,
     AVG(AvaiMemKB) OVER (PARTITION BY HostName) AS Media_AvaiMemKB,
-	@InstanceType AS InstanceType, -- Adicionar a coluna desejada aqui
+    @InstanceType AS InstanceType, 
     [Event Time]
 FROM #TempResults
-WHERE [Event Time] >= DATEADD(SECOND, -160, GETDATE())
+WHERE [Event Time] >= DATEADD(MINUTE, -1, GETDATE());
+
+-- Drop a tabela temporária
+DROP TABLE #TempResults;
+
 
 """
 
