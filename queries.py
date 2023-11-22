@@ -123,7 +123,7 @@ SELECT
     @InstanceType AS InstanceType, 
     [Event Time]
 FROM #TempResults
-WHERE [Event Time] >= DATEADD(MINUTE, -1, GETDATE());
+WHERE [Event Time] >= DATEADD(MINUTE, -10, GETDATE());
 
 -- Drop a tabela temporária
 DROP TABLE #TempResults;
