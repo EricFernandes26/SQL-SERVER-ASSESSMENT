@@ -29,7 +29,7 @@ def sqlserver_assessment(csv_file_name, user, password, dbserver, dbname, query)
 
     # Cria um arquivo CSV e escreve os resultados nele.
     with open(f"./results/{csv_file_name}", 'w', newline='') as csvfile:
-        csv_writer = csv.writer(csvfile)
+        csv_writer = csv.writer(csvfile, delimiter=';')
         # Escreve a linha de cabeçalho
         header = [column[0] for column in cursor.description]
         csv_writer.writerow(header)
