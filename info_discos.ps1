@@ -10,4 +10,3 @@ $csvPath = "C:\Users\Administrator\Desktop\SQL-SERVER-ASSESSMENT\results\info_di
 # Exportar para CSV com delimitador ;
 $diskInfo | Export-Csv -Path $csvPath -NoTypeInformation -Delimiter ';'
 
-Write-Host "As informacoees dos discos foram exportadas para $csvPath"
