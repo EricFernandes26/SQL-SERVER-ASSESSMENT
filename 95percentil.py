@@ -74,4 +74,4 @@ df = pd.DataFrame({
 # Exportar para CSV com formatação amigável
 df.to_csv(output_file_path, sep=';', decimal=',', index=False)
 
-print(f'O arquivo CSV foi salvo em: {output_file_path}')
+
