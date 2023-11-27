@@ -111,7 +111,7 @@ FROM
         CASE
 			WHEN @SuggestedVCPUUtilization >= 0 AND @SuggestedMemoryUtilization <=  10 THEN 't3.nano'
 			WHEN @SuggestedVCPUUtilization >= 11 AND @SuggestedMemoryUtilization <= 19 THEN 't3.medium'
-            WHEN @SuggestedVCPUUtilization >= 20 AND @SuggestedMemoryUtilization <= 29 THEN 't3.large'
+            WHEN @SuggestedVCPUUtilization >= 20 AND @SuggestedMemoryUtilization <= 29 THEN 'c6i.large'
             WHEN @SuggestedVCPUUtilization >= 30 AND @SuggestedMemoryUtilization <= 39 THEN 'm5.large'
 			WHEN @SuggestedVCPUUtilization >= 40 AND @SuggestedMemoryUtilization <= 49 THEN 'm5.xlarge'
 			WHEN @SuggestedVCPUUtilization >= 50 AND @SuggestedMemoryUtilization <= 59 THEN 'm5.2xlarge'
