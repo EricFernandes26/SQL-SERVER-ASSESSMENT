@@ -12,6 +12,6 @@ This tool is under development and studies to tighten the SQL Server assessment
 
 4 - then run CMD in the SQL-SERVER-ASSESSMENT folder on the desktop.
 
-5 - Now let's install the dependencies for the program to work and to do this we will run the Instaler-python.bat file
+5 - Now we are going to install the dependencies for the program to work and to do this we are going to run the Instaler-python.bat file and the expected result is this and then the file will download the necessary libraries for the program to work:
 ![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/33bbd57e-819e-46c4-b929-e5bb704a5386)
 
