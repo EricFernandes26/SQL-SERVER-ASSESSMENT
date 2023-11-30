@@ -34,6 +34,7 @@ If you select [R] Run Once the final result will be as follows:
 
 
 7 - now in the results folder you can view the csv file with the instance recommendation for AWS:
+![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/55b8a527-72d7-45d8-844b-3988ac055e07)
 
 
 
