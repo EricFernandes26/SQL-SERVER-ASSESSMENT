@@ -24,3 +24,7 @@ Server
 Database name
 
 After filling in the items above this is the result
+![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/345e5091-c3e4-4588-8f2a-c322ec92edcf)
+
+The script will ask if you also want to collect information from the machine's disks. If you want to run the script, these are the options:
+
