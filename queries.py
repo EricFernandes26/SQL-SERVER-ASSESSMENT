@@ -109,17 +109,17 @@ SELECT TOP 1
 FROM
     (SELECT
         CASE
-			WHEN @SuggestedVCPUUtilization >= 0 AND @SuggestedMemoryUtilization <=  10 THEN 't3.nano'
-			WHEN @SuggestedVCPUUtilization >= 11 AND @SuggestedMemoryUtilization <= 19 THEN 't3.medium'
-            WHEN @SuggestedVCPUUtilization >= 20 AND @SuggestedMemoryUtilization <= 29 THEN 'c6i.large'
-            WHEN @SuggestedVCPUUtilization >= 30 AND @SuggestedMemoryUtilization <= 39 THEN 'm5.large'
-			WHEN @SuggestedVCPUUtilization >= 40 AND @SuggestedMemoryUtilization <= 49 THEN 'm5.xlarge'
-			WHEN @SuggestedVCPUUtilization >= 50 AND @SuggestedMemoryUtilization <= 59 THEN 'm5.2xlarge'
-			WHEN @SuggestedVCPUUtilization >= 60 AND @SuggestedMemoryUtilization <= 69 THEN 'r6i.8xlarge'
-			WHEN @SuggestedVCPUUtilization >= 70 AND @SuggestedMemoryUtilization <= 79 THEN 'r6i.12xlarge'
-            WHEN @SuggestedVCPUUtilization >= 80 AND @SuggestedMemoryUtilization <= 89 THEN 'r6i.16xlarge'
+			WHEN @SuggestedVCPUUtilization >= 0 AND @SuggestedMemoryUtilization <=  10 THEN 'r6i.xlarge'
+			WHEN @SuggestedVCPUUtilization >= 11 AND @SuggestedMemoryUtilization <= 19 THEN 'r6i.2xlarge'
+            WHEN @SuggestedVCPUUtilization >= 20 AND @SuggestedMemoryUtilization <= 29 THEN 'r6i.8xlarge'
+            WHEN @SuggestedVCPUUtilization >= 30 AND @SuggestedMemoryUtilization <= 39 THEN 'r6i.12xlarge'
+			WHEN @SuggestedVCPUUtilization >= 40 AND @SuggestedMemoryUtilization <= 49 THEN 'r6i.16xlarge'
+			WHEN @SuggestedVCPUUtilization >= 50 AND @SuggestedMemoryUtilization <= 59 THEN 'r6i.24xlarge'
+			WHEN @SuggestedVCPUUtilization >= 60 AND @SuggestedMemoryUtilization <= 69 THEN 'r6i.32xlarge'
+			WHEN @SuggestedVCPUUtilization >= 70 AND @SuggestedMemoryUtilization <= 79 THEN 'x2idn.16xlarge'
+            WHEN @SuggestedVCPUUtilization >= 80 AND @SuggestedMemoryUtilization <= 89 THEN 'x2idn.24xlarge'
 			WHEN @SuggestedVCPUUtilization >= 90 AND @SuggestedMemoryUtilization <= 99 THEN 'x2iedn.32xlarge'
-            ELSE 't3.micro'
+            ELSE 'r6i.large'
         END AS InstanceType
     FROM
         #TempResults) AS SubQuery;
