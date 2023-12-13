@@ -1,154 +1,189 @@
 queries = {
     "sqlserver_assessment": """
---SAM-SQL07
-SET NOCOUNT ON;
-DECLARE @totaliops DECIMAL;
-DECLARE @Throughput DECIMAL;
-DECLARE @TotalMemKB DECIMAL;
-
--- Parte 1: Obter total de memória física
-SELECT @TotalMemKB = (sm.total_physical_memory_kb / 1024)
-FROM sys.dm_os_sys_info si, sys.dm_os_sys_memory sm;
-
-SELECT 
-    @totaliops = ISNULL(SUM(io_stall / NULLIF((num_of_reads + num_of_writes), 0)), 0),
-    @Throughput = ISNULL(SUM((num_of_bytes_read + num_of_bytes_written) / 1048576), 0)
-FROM sys.dm_io_virtual_file_stats(NULL, NULL);
-
--- Criar tabela temporária para armazenar os resultados intermediários
-CREATE TABLE #TempResults (
-    HostName NVARCHAR(128),
-    NumberOfCPUs INT,
-    SQLProcessUtilization INT,
-    TotalMemKB DECIMAL,
-    AvaiMemKB DECIMAL,
-    PLE DECIMAL,
-    Percentil95_SQLProcessUtilization DECIMAL,
-    Percentil95_AvaiMemKB DECIMAL,
-    VCpu INT,
-    Memory INT,
-    Throughput INT,
-    VCPUUtilization INT,
-    MemoryUtilization INT,
-    [Event Time] DATETIME
-);
-
--- Calcular valores intermediários e inserir na tabela temporária
-INSERT INTO #TempResults (HostName, NumberOfCPUs, SQLProcessUtilization, TotalMemKB, AvaiMemKB, PLE, Percentil95_SQLProcessUtilization, Percentil95_AvaiMemKB, [Event Time])
 SELECT 
     HOST_NAME() AS HostName,
+    DB_NAME(mf.database_id) AS DatabaseName,
+    CONVERT(DECIMAL(10,2), SUM(mf.size) * 8 / 1024.0) AS TotalSizeMB,
     (SELECT cpu_count FROM sys.dm_os_sys_info) AS NumberOfCPUs,
-    SQLProcessUtilization,
-    @TotalMemKB AS TotalMemKB,
-    x.AvaiMem AS AvaiMemKB,
-    x.PLE,
-    PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY SQLProcessUtilization) OVER (PARTITION BY HOST_NAME()) AS Percentil95_SQLProcessUtilization,
-    PERCENTILE_DISC(0.95) WITHIN GROUP (ORDER BY x.AvaiMem) OVER (PARTITION BY HOST_NAME()) AS Percentil95_AvaiMemKB,
-    DATEADD(ms, -1 * ((SELECT cpu_ticks / (cpu_ticks / ms_ticks) FROM sys.dm_os_sys_info) - [timestamp]), GETDATE()) AS [Event Time]
-FROM (
-    SELECT
-        GETDATE() AS collectionTime,
-        (si.committed_kb / 1024) AS Committed,
-        (si.committed_target_kb / 1024) AS targetCommited,
-        (sm.total_physical_memory_kb / 1024) AS totalMem,
-        (sm.available_physical_memory_kb / 1024) AS AvaiMem,
-        (SELECT SUM(cntr_value) / COUNT(*) FROM sys.dm_os_performance_counters 
-            WHERE counter_name = 'Page Life expectancy' AND object_name LIKE '%buffer node%') AS PLE
-    FROM sys.dm_os_sys_info si, sys.dm_os_sys_memory sm
-) AS x
+    (SELECT SUM(cntr_value) / COUNT(*) 
+     FROM sys.dm_os_performance_counters 
+     WHERE counter_name = 'Page Life expectancy' AND object_name LIKE '%buffer node%'
+    ) AS PLE,
+    x.SQLProcessUtilization,
+    FORMAT(physical_memory_kb / (1024.0 * 1024.0), 'N2') AS physical_memory_gb,
+    CONVERT(INT, b.CostThreshold) AS [Cost Threshold for Parallelism],
+    CONVERT(INT, b.MaxDegree) AS [Max Degree of Parallelism],
+    c.name,
+    CAST(c.value AS VARCHAR(255)) AS ConvertedValue
+FROM sys.dm_os_sys_info
 CROSS APPLY (
-    SELECT TOP(30) 
-        record.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS SQLProcessUtilization, 
-        [timestamp],
-        record.value('(./Record/SchedulerMonitorEvent/SystemHealth/SystemIdle)[1]', 'int') AS AvaiMem
+    SELECT name, value, [description]
+    FROM sys.configurations
+    WHERE name LIKE '%server memory%'
+) c
+CROSS APPLY (
+    SELECT 
+        MAX(CASE WHEN name = 'cost threshold for parallelism' THEN value END) AS CostThreshold,
+        MAX(CASE WHEN name = 'max degree of parallelism' THEN value_in_use END) AS MaxDegree
+    FROM sys.configurations
+    WHERE name IN ('cost threshold for parallelism', 'max degree of parallelism')
+) b
+CROSS APPLY (
+    SELECT TOP (1)
+        record.value('(./Record/SchedulerMonitorEvent/SystemHealth/ProcessUtilization)[1]', 'int') AS SQLProcessUtilization
     FROM (
         SELECT [timestamp], CONVERT(xml, record) AS [record]
         FROM sys.dm_os_ring_buffers 
         WHERE ring_buffer_type = N'RING_BUFFER_SCHEDULER_MONITOR' 
-        AND record LIKE '%<SystemHealth>%'
-    ) AS x
-) AS y;
+          AND record LIKE '%<SystemHealth>%'
+    ) AS xInner
+    ORDER BY [timestamp] DESC
+) x
+JOIN sys.master_files mf ON mf.database_id > 4 -- Excluir bancos de dados do sistema
+GROUP BY mf.database_id, c.name, c.value, c.[description], x.SQLProcessUtilization, b.CostThreshold, b.MaxDegree, physical_memory_kb
+OPTION (RECOMPILE);
 
--- Calcular a média da coluna SQLProcessUtilization
-DECLARE @Media_SQLProcessUtilization DECIMAL;
-SELECT @Media_SQLProcessUtilization = AVG(SQLProcessUtilization) FROM #TempResults;
 
--- Calcular a média da coluna AvaiMemKB
-DECLARE @Media_AvaiMemKB DECIMAL;
-SELECT @Media_AvaiMemKB = AVG(AvaiMemKB) FROM #TempResults;
 
--- Adicionar a lógica para definir @InstanceType
-DECLARE @InstanceType NVARCHAR(50);
+""",
 
--- Lógica para sugerir valores
-DECLARE @SuggestedVCPU INT,
-        @SuggestedMemory INT,
-        @SuggestedThroughput INT,
-        @SuggestedVCPUUtilization INT,
-        @SuggestedMemoryUtilization INT;
+"sqlserver_assessment_databases_ativos": """
+--- query para ver o total de databases ativos e inativos 
 
--- Lógica para sugerir valores de forma aleatória
-SET @SuggestedVCPU = CAST(RAND() * (32 - 1) + 1 AS INT);  -- Intervalo de 1 a 32 VCPUs
-SET @SuggestedMemory = CAST(RAND() * (65536 - 1024) + 1024 AS INT);  -- Intervalo de 1024 MB a 65,536 MB (64 GB)
-SET @SuggestedThroughput = CAST(RAND() * (1000 - 1) + 1 AS INT);  -- Intervalo de 1 a 1000
-SET @SuggestedVCPUUtilization = CAST(RAND() * (100 - 1) + 1 AS INT);  -- Intervalo de 1 a 100
-SET @SuggestedMemoryUtilization = CAST(RAND() * (100 - 1) + 1 AS INT);  -- Intervalo de 1 a 100
-
--- Inserir os valores sugeridos na tabela temporária
-UPDATE #TempResults
-SET
-    VCpu = @SuggestedVCPU,
-    Memory = @SuggestedMemory,
-    Throughput = @SuggestedThroughput,
-    VCPUUtilization = @SuggestedVCPUUtilization,
-    MemoryUtilization = @SuggestedMemoryUtilization;
-
--- Lógica para determinar a instância EC2
-SELECT TOP 1
-    @InstanceType = InstanceType
-FROM
-    (SELECT
-        CASE
-			WHEN @SuggestedVCPUUtilization >= 0 AND @SuggestedMemoryUtilization <=  10 THEN 'r6i.xlarge'
-			WHEN @SuggestedVCPUUtilization >= 11 AND @SuggestedMemoryUtilization <= 19 THEN 'r6i.2xlarge'
-            WHEN @SuggestedVCPUUtilization >= 20 AND @SuggestedMemoryUtilization <= 29 THEN 'r6i.8xlarge'
-            WHEN @SuggestedVCPUUtilization >= 30 AND @SuggestedMemoryUtilization <= 39 THEN 'r6i.12xlarge'
-			WHEN @SuggestedVCPUUtilization >= 40 AND @SuggestedMemoryUtilization <= 49 THEN 'r6i.16xlarge'
-			WHEN @SuggestedVCPUUtilization >= 50 AND @SuggestedMemoryUtilization <= 59 THEN 'r6i.24xlarge'
-			WHEN @SuggestedVCPUUtilization >= 60 AND @SuggestedMemoryUtilization <= 69 THEN 'r6i.32xlarge'
-			WHEN @SuggestedVCPUUtilization >= 70 AND @SuggestedMemoryUtilization <= 79 THEN 'x2idn.16xlarge'
-            WHEN @SuggestedVCPUUtilization >= 80 AND @SuggestedMemoryUtilization <= 89 THEN 'x2idn.24xlarge'
-			WHEN @SuggestedVCPUUtilization >= 90 AND @SuggestedMemoryUtilization <= 99 THEN 'x2iedn.32xlarge'
-            ELSE 'r6i.large'
-        END AS InstanceType
-    FROM
-        #TempResults) AS SubQuery;
-
--- Consulta para obter resultados finais
 SELECT 
-    HostName,
-    NumberOfCPUs AS NumberOfCPU,
-    SQLProcessUtilization,
-    TotalMemKB,
-    AvaiMemKB,
-    PLE,
-    @totaliops AS TotalIOPS,
-    @Throughput AS Throughput,
-    Percentil95_SQLProcessUtilization,
-    @Media_SQLProcessUtilization AS Media_SQLProcessUtilization,
-    MAX(Percentil95_AvaiMemKB) OVER (PARTITION BY HostName) AS Percentil95_AvaiMemKB,
-    AVG(AvaiMemKB) OVER (PARTITION BY HostName) AS Media_AvaiMemKB,
-    @InstanceType AS InstanceType,
-    [Event Time]
-FROM #TempResults
-WHERE [Event Time] >= DATEADD(MINUTE, -10, GETDATE());
+    COUNT(*) AS TotalDatabases,
+    SUM(CASE WHEN state_desc = 'ONLINE' THEN 1 ELSE 0 END) AS ActiveDatabases,
+    SUM(CASE WHEN state_desc <> 'ONLINE' THEN 1 ELSE 0 END) AS InactiveDatabases
+FROM sys.databases;
+    """,
 
--- Drop the temporary table
-DROP TABLE #TempResults;
+"sqlserver_assessment_CPU_Stats": """
+WITH DB_CPU_Stats
+AS
+(
+    SELECT DatabaseID, DB_Name(DatabaseID) AS [DatabaseName], 
+      SUM(total_worker_time) AS [CPU_Time_Ms]
+    FROM sys.dm_exec_query_stats AS qs
+    CROSS APPLY (
+                    SELECT CONVERT(int, value) AS [DatabaseID] 
+                  FROM sys.dm_exec_plan_attributes(qs.plan_handle)
+                  WHERE attribute = N'dbid') AS F_DB
+    GROUP BY DatabaseID
+)
+SELECT
+    DatabaseName,
+    [CPU_Time_Ms], 
+    CAST([CPU_Time_Ms] * 1.0 / SUM([CPU_Time_Ms]) OVER() * 100.0 AS DECIMAL(5, 2)) AS [CPUPercent]
+FROM DB_CPU_Stats
+--WHERE DatabaseID > 4 -- system databases
+--AND DatabaseID <> 32767 -- ResourceDB
+ORDER BY [CPU_Time_Ms] DESC OPTION (RECOMPILE);
+
+
+    """,
+
+"sqlserver_assessment_Memory_Status": """
+
+DECLARE @total_buffer INT;  
+  
+SELECT @total_buffer = cntr_value  
+FROM sys.dm_os_performance_counters   
+WHERE RTRIM([object_name]) LIKE '%Buffer Manager'  
+AND counter_name = 'Database Pages';  
+  
+;WITH src AS  
+(  
+  SELECT   
+    database_id, db_buffer_pages = COUNT_BIG(*)  
+  FROM sys.dm_os_buffer_descriptors  
+  --WHERE database_id BETWEEN 5 AND 32766  
+  GROUP BY database_id  
+)  
+SELECT  
+  [db_name] = CASE [database_id] WHEN 32767   
+                THEN 'Resource DB'   
+                ELSE DB_NAME([database_id]) END,  
+  db_buffer_pages,  
+  db_buffer_MB = db_buffer_pages / 128,  
+  db_buffer_percent = CONVERT(DECIMAL(6,3),   
+  db_buffer_pages * 100.0 / @total_buffer)  
+FROM src  
+WHERE [database_id] <> 32767  -- Excluir Resource DB
+ORDER BY db_buffer_MB DESC;
+
+    """,
 
 
 
-"""
 
-    
+
+
+"sqlserver_assessment_login": """
+---Total de Conexões por Login:
+SELECT 
+    DB_NAME(dbid) as DBName, 
+    COUNT(dbid) as NumberOfConnections,
+    loginame as LoginName
+FROM
+    sys.sysprocesses
+WHERE 
+    dbid > 0
+GROUP BY 
+    dbid, loginame
+;
+
+    """,
+
+"sqlserver_assessment_alwayson": """
+--Show Availability groups visible to the Server and Replica information such as Which server is the Primary
+--Sync and Async modes , Readable Secondary and Failover Mode, these can all be filtered using a Where clause
+--if you are running some checks, no Where clause will show you all of the information.
+WITH AGStatus AS(
+SELECT
+name as AGname,
+replica_server_name,
+CASE WHEN  (primary_replica  = replica_server_name) THEN  1
+ELSE  '' END AS IsPrimaryServer,
+secondary_role_allow_connections_desc AS ReadableSecondary,
+[availability_mode]  AS [Synchronous],
+failover_mode_desc
+FROM master.sys.availability_groups Groups
+INNER JOIN master.sys.availability_replicas Replicas ON Groups.group_id = Replicas.group_id
+INNER JOIN master.sys.dm_hadr_availability_group_states States ON Groups.group_id = States.group_id
+)
+ 
+Select
+[AGname],
+[Replica_server_name],
+[IsPrimaryServer],
+[Synchronous],
+[ReadableSecondary],
+[Failover_mode_desc]
+FROM AGStatus
+--WHERE
+--IsPrimaryServer = 1
+--AND Synchronous = 1
+ORDER BY
+AGname ASC,
+IsPrimaryServer DESC;
+
+    """,
+
+"sqlserver_assessment_mirror": """
+SELECT 
+   SERVERPROPERTY('ServerName') AS Principal,
+   m.mirroring_partner_instance AS Mirror,
+   DB_NAME(m.database_id) AS DatabaseName,
+   SUM(f.size*8/1024) AS DatabaseSize,
+   CASE m.mirroring_safety_level
+      WHEN 1 THEN 'HIGH PERFORMANCE'
+      WHEN 2 THEN 'HIGH SAFETY'
+   END AS 'OperatingMode',
+   RIGHT(m.mirroring_partner_name, CHARINDEX( ':', REVERSE(m.mirroring_partner_name) + ':' ) - 1 ) AS Port
+FROM sys.database_mirroring m
+JOIN sys.master_files f ON m.database_id = f.database_id
+WHERE m.mirroring_role_desc = 'PRINCIPAL'
+GROUP BY m.mirroring_partner_instance, m.database_id, m.mirroring_safety_level, m.mirroring_partner_name
+    """
+
 }
