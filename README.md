@@ -23,11 +23,12 @@ Attention points:
 6 - When you run this file it will ask for some outputs.
 Username
 Password
-Server
-Database name
+Server-name
+Database-name
 
 After filling in the items above this is the result
-![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/345e5091-c3e4-4588-8f2a-c322ec92edcf)
+![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/2267e77f-70da-4ac2-b398-3a664815dcb2)
+
 
 
 
