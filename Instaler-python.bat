@@ -22,6 +22,6 @@ echo Python 3.12.0 foi instalado com sucesso em %PYTHON_INSTALL_DIR%\python.exe!
 
 rem Executa o upgrade do pip e instalação das bibliotecas
 %PYTHON_INSTALL_DIR%\python.exe -m pip install --upgrade pip
-%PYTHON_INSTALL_DIR%\python.exe -m pip install pyodbc psutil pandas
+%PYTHON_INSTALL_DIR%\python.exe -m pip install pyodbc psutil pandas XlsxWriter SQLAlchemy 
 
 echo Bibliotecas instaladas com sucesso!
