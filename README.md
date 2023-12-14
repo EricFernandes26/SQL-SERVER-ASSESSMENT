@@ -33,7 +33,7 @@ After filling in the items above this is the result
 
 
 7 - Now in the results folder you can view the csv files with the assessment of your database environment
-![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/b03144c7-1697-4f92-85e3-b55e6ba822df)
+![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/661e3d20-78d0-4f30-b841-dc4bb4aae9c8)
 
 
 
