@@ -20,7 +20,7 @@ Attention points:
 
 5.1 - After installing the dependencies you can close CMD and open another one in the same folder.
 
-6.1 - When you run this file it will ask for some outputs.
+6 - When you run this file it will ask for some outputs.
 Username
 Password
 Server
@@ -31,7 +31,7 @@ After filling in the items above this is the result
 
 
 
-7 - now in the results folder you can view the csv file with the instance recommendation for AWS:
+7 - Now in the results folder you can view the csv files with the assessment of your database environment
 ![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/b03144c7-1697-4f92-85e3-b55e6ba822df)
 
 
