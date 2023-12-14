@@ -33,7 +33,8 @@ The script will ask if you also want to collect information from the machine's d
 ![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/b1cc6f77-4b25-46ad-b529-e0b1d25737b4)
 
 If you select [R] Run Once the final result will be as follows:
-![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/f86db2c3-19e4-4ade-82d8-c1dabb13889f)
+![image](https://github.com/EricFernandes26/SQL-SERVER-ASSESSMENT/assets/83287307/e5f91862-61bd-4b16-a4c2-8525ca7abe9a)
+
 
 
 7 - now in the results folder you can view the csv file with the instance recommendation for AWS:
