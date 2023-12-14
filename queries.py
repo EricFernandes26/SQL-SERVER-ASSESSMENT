@@ -47,7 +47,7 @@ OPTION (RECOMPILE);
 
 """,
 
-"sqlserver_assessment_databases_ativos": """
+"sqlserver_assessment_databases": """
 --- query para ver o total de databases ativos e inativos 
 
 SELECT 
@@ -82,7 +82,7 @@ ORDER BY [CPU_Time_Ms] DESC OPTION (RECOMPILE);
 
     """,
 
-"sqlserver_assessment_Memory_Status": """
+"sqlserver_assessment_Memory_Stats": """
 
 DECLARE @total_buffer INT;  
   
@@ -113,8 +113,26 @@ ORDER BY db_buffer_MB DESC;
 
     """,
 
+"sqlserver_assessment_AlwaysOn_Mirror": """
+--Consulta para verificar se os databases estao em alwaysOn, Mirror ou nenhum dos dois
+SELECT
+    d.name AS DatabaseName,
+    CASE
+        WHEN h.is_local = 1 THEN 'Always On'
+        WHEN m.mirroring_state_desc = 'SYNCHRONIZED' THEN 'Mirroring'
+        ELSE 'Nenhum dos dois'
+    END AS Configuracao
+FROM
+    sys.databases d
+LEFT JOIN
+    sys.dm_hadr_database_replica_states h ON d.database_id = h.database_id AND h.is_local = 1
+LEFT JOIN
+    sys.database_mirroring m ON d.database_id = m.database_id
+WHERE
+    d.database_id > 4; -- Excluir bancos de sistema
 
 
+    """,
 
 
 
@@ -132,58 +150,8 @@ GROUP BY
     dbid, loginame
 ;
 
-    """,
-
-"sqlserver_assessment_alwayson": """
---Show Availability groups visible to the Server and Replica information such as Which server is the Primary
---Sync and Async modes , Readable Secondary and Failover Mode, these can all be filtered using a Where clause
---if you are running some checks, no Where clause will show you all of the information.
-WITH AGStatus AS(
-SELECT
-name as AGname,
-replica_server_name,
-CASE WHEN  (primary_replica  = replica_server_name) THEN  1
-ELSE  '' END AS IsPrimaryServer,
-secondary_role_allow_connections_desc AS ReadableSecondary,
-[availability_mode]  AS [Synchronous],
-failover_mode_desc
-FROM master.sys.availability_groups Groups
-INNER JOIN master.sys.availability_replicas Replicas ON Groups.group_id = Replicas.group_id
-INNER JOIN master.sys.dm_hadr_availability_group_states States ON Groups.group_id = States.group_id
-)
- 
-Select
-[AGname],
-[Replica_server_name],
-[IsPrimaryServer],
-[Synchronous],
-[ReadableSecondary],
-[Failover_mode_desc]
-FROM AGStatus
---WHERE
---IsPrimaryServer = 1
---AND Synchronous = 1
-ORDER BY
-AGname ASC,
-IsPrimaryServer DESC;
-
-    """,
-
-"sqlserver_assessment_mirror": """
-SELECT 
-   SERVERPROPERTY('ServerName') AS Principal,
-   m.mirroring_partner_instance AS Mirror,
-   DB_NAME(m.database_id) AS DatabaseName,
-   SUM(f.size*8/1024) AS DatabaseSize,
-   CASE m.mirroring_safety_level
-      WHEN 1 THEN 'HIGH PERFORMANCE'
-      WHEN 2 THEN 'HIGH SAFETY'
-   END AS 'OperatingMode',
-   RIGHT(m.mirroring_partner_name, CHARINDEX( ':', REVERSE(m.mirroring_partner_name) + ':' ) - 1 ) AS Port
-FROM sys.database_mirroring m
-JOIN sys.master_files f ON m.database_id = f.database_id
-WHERE m.mirroring_role_desc = 'PRINCIPAL'
-GROUP BY m.mirroring_partner_instance, m.database_id, m.mirroring_safety_level, m.mirroring_partner_name
     """
+
+
 
 }
